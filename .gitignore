@@ -1,0 +1,29 @@
+# dependencies
+node_modules/
+.pnp.*
+
+# build outputs
+dist/
+build/
+coverage/
+*.tsbuildinfo
+
+# env files - commit only examples
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# local tools
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Supabase local runtime
+supabase/.temp/
+
+# logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
