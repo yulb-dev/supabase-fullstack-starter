@@ -8,17 +8,13 @@ type ApiErrorPayload = {
   };
 };
 
-export async function apiRequest<T>(
-  path: string,
-  accessToken: string,
-  init: RequestInit = {},
-): Promise<T> {
+export async function apiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(`${apiBaseUrl}${path}`, {
     ...init,
+    credentials: 'include',
     headers: {
       ...(init.body ? { 'content-type': 'application/json' } : {}),
       ...(init.headers ?? {}),
-      authorization: `Bearer ${accessToken}`,
     },
   });
 

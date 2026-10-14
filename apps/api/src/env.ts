@@ -6,8 +6,8 @@ const envSchema = z.object({
   HOST: z.string().default('0.0.0.0'),
   PORT: z.coerce.number().int().min(1).max(65535).default(4000),
   WEB_ORIGIN: z.string().default('http://localhost:5173'),
-  SUPABASE_URL: z.string().url().optional(),
-  SUPABASE_PUBLISHABLE_KEY: z.string().min(1).optional(),
+  BETTER_AUTH_URL: z.string().url().default('http://localhost:4000'),
+  BETTER_AUTH_SECRET: z.string().min(32).optional(),
   DATABASE_URL: z.string().min(1).optional(),
 });
 
@@ -22,7 +22,7 @@ export const env = {
   host: parsed.data.HOST,
   port: parsed.data.PORT,
   webOrigins: parsed.data.WEB_ORIGIN.split(',').map((origin) => origin.trim()).filter(Boolean),
-  supabaseUrl: parsed.data.SUPABASE_URL,
-  supabasePublishableKey: parsed.data.SUPABASE_PUBLISHABLE_KEY,
+  betterAuthUrl: parsed.data.BETTER_AUTH_URL,
+  betterAuthSecret: parsed.data.BETTER_AUTH_SECRET,
   databaseUrl: parsed.data.DATABASE_URL,
 };

@@ -1,84 +1,66 @@
-# Supabase Full-Stack Starter
+# PostgreSQL Full-Stack Starter
 
-一个可扩展的前后端分离 TypeScript 项目模板：React + Vite 前端、Fastify API、Supabase Auth + PostgreSQL、Drizzle ORM。示例业务是登录后的个人 Todo CRUD。
+前后端分离的 TypeScript 项目模板：React + Vite 前端、Fastify API、Drizzle ORM，以及 Supabase 托管的 PostgreSQL 数据库。
 
-> 本仓库只包含本地项目模板和数据库迁移，不会自动创建 Supabase 云项目，也不包含任何真实密钥。需要在自己的 Supabase 项目中配置环境变量并应用迁移。
+**Supabase 在本项目中只提供 PostgreSQL 数据库。** 登录、注册和会话由运行在 Fastify 服务中的 Better Auth 处理；应用不依赖 Supabase Auth、Storage、Realtime 或 Edge Functions。
 
 ## 技术栈
 
-- **Frontend**：React 19、TypeScript、Vite、Tailwind CSS 4、TanStack Query、React Hook Form、Zod
-- **Backend**：Node.js、Fastify 5、TypeScript、REST API
+- **Frontend**：React 19、TypeScript、Vite、Tailwind CSS 4、TanStack Query、React Hook Form、Zod、Better Auth React client
+- **Backend**：Node.js、Fastify 5、TypeScript、REST API、Better Auth
 - **Database**：Supabase PostgreSQL、Drizzle ORM、Postgres.js
-- **Auth**：Supabase Auth；API 在服务端校验 Bearer access token
-- **Quality**：Node.js built-in test runner + Fastify `inject` smoke tests、TypeScript strict mode
+- **Auth**：Better Auth 邮箱/密码认证、HTTP-only session cookie，认证数据也保存到同一个 PostgreSQL 数据库
+- **Migrations**：Supabase CLI 仅用于连接项目和执行 PostgreSQL SQL migrations
 
-依赖版本在各 `package.json` 中精确固定，避免安装时悄悄漂移。首次运行 `pnpm install` 后，请将生成的 `pnpm-lock.yaml` 一并提交，后续 CI 使用 `pnpm install --frozen-lockfile`。
-
-## 目录结构
+## 项目结构
 
 ```text
 apps/
-  web/                       # React + Vite SPA
-    src/
-      lib/                   # Supabase client、API client
-      App.tsx                # 登录/注册和 Todo 示例
-      main.tsx
-      styles.css
-  api/                       # Fastify REST API
-    src/
-      db/                    # Drizzle schema + connection
-      modules/todos/         # Todo CRUD routes
-      plugins/               # Supabase access-token validation
-      app.ts                 # Fastify app factory
-      index.ts               # Server entrypoint
-      app.test.ts            # API smoke tests
+  web/                         # React + Vite SPA
+    src/lib/auth-client.ts     # Better Auth client
+    src/lib/api.ts             # cookie-based API client
+    src/AuthProvider.tsx
+    src/App.tsx                # sign-in / sign-up / Todo demo
+  api/
+    src/plugins/auth.ts        # Better Auth server + session guard
+    src/db/                    # Drizzle schema and PostgreSQL connection
+    src/modules/todos/         # Todo CRUD endpoints
+    src/app.ts                 # Fastify app and Better Auth routes
+    src/index.ts
+    src/app.test.ts
 supabase/
-  config.toml
-  migrations/                # SQL migration; RLS policies included
+  migrations/                  # auth + app tables in PostgreSQL
 ```
 
-## 前置要求
+## 前置条件
 
-- Node.js **24 LTS**（最低兼容 Node.js 22.12）
+- Node.js 24 LTS（最低兼容 Node.js 22.12）
 - pnpm 12
-- Supabase 项目
-- Supabase CLI（已作为根目录 devDependency 安装，无需全局安装）
+- 一个 Supabase 项目（使用其 PostgreSQL connection string）
 
-## 1. 配置 Supabase
+## 1. 配置数据库和密钥
 
-1. 在 [Supabase Dashboard](https://supabase.com/dashboard) 创建或选择一个项目。
-2. 在项目 Connect 面板中获取 **Project URL** 与 **Publishable key**。
-3. 在 Connect 面板的 Database connection string 中获取连接 URI。常驻 Node.js API 推荐 **Session pooler**；如果使用 Transaction pooler，请确认连接方式适合你的部署环境。数据库密码中的特殊字符必须按 URI 规则编码。
-4. 复制环境变量模板：
+在 [Supabase Dashboard](https://supabase.com/dashboard) 创建或选择项目。进入 **Connect → Database** 获取连接字符串；长期运行的 Node.js API 通常使用 Session Pooler。特殊字符应按 URI 规则编码。
 
-   ```bash
-   cp apps/api/.env.example apps/api/.env
-   cp apps/web/.env.example apps/web/.env
-   ```
+复制环境变量模板：
 
-5. 填写两个 `.env` 文件。`VITE_` 开头的变量会发送给浏览器，只允许填写 Supabase Project URL、Publishable key 和 API URL；**不要将数据库连接串、数据库密码或 `service_role` / secret key 放入前端环境变量。**
+```bash
+cp apps/api/.env.example apps/api/.env
+cp apps/web/.env.example apps/web/.env
+```
 
-### API 环境变量（`apps/api/.env`）
+编辑 `apps/api/.env`：
 
-| 变量 | 用途 |
-|---|---|
-| `PORT` | Fastify 监听端口，默认 `4000` |
-| `WEB_ORIGIN` | 允许跨域的前端 origin，默认 `http://localhost:5173` |
-| `SUPABASE_URL` | Supabase Project URL，用于验证登录用户 |
-| `SUPABASE_PUBLISHABLE_KEY` | Supabase Publishable key，用于 Auth 请求 |
-| `DATABASE_URL` | 服务端 PostgreSQL 连接串，只能保存在 API 环境 |
+- `DATABASE_URL`：Supabase PostgreSQL 连接字符串，只能放在后端环境中。
+- `BETTER_AUTH_SECRET`：用 `openssl rand -base64 32` 生成的随机密钥。
+- `BETTER_AUTH_URL`：本地为 `http://localhost:4000`；部署时改成 API 的 HTTPS 公网 URL。
+- `WEB_ORIGIN`：允许访问 API 的前端 origin；部署时配置成正式前端地址。
 
-### 前端环境变量（`apps/web/.env`）
+编辑 `apps/web/.env`，设置 `VITE_API_BASE_URL`（本地默认 `http://localhost:4000`）。
 
-| 变量 | 用途 |
-|---|---|
-| `VITE_SUPABASE_URL` | Supabase Project URL |
-| `VITE_SUPABASE_PUBLISHABLE_KEY` | Supabase Publishable key |
-| `VITE_API_BASE_URL` | Fastify API base URL，默认 `http://localhost:4000` |
+不要将数据库连接串、数据库密码或 Better Auth secret 放进任何 `VITE_` 变量。它们只允许存在于服务端环境。
 
 ## 2. 应用数据库迁移
-
-在仓库根目录运行：
 
 ```bash
 pnpm install
@@ -87,13 +69,13 @@ pnpm exec supabase link --project-ref <你的-project-ref>
 pnpm db:push
 ```
 
-迁移会创建 `public.todos`、索引、RLS 和按 `auth.uid()` 限制的策略。先检查目标 Supabase 项目和迁移 SQL，再执行 `db:push`。不要对生产项目盲目执行未经审查的迁移。
+迁移会在 PostgreSQL 中创建 Better Auth 所需的 `user`、`session`、`account`、`verification` 表，以及 Todo 表，并启用 RLS。没有给 `anon` 或 `authenticated` 角色开放表策略；业务数据通过后端的私有 `DATABASE_URL` 访问，Fastify 对每个 Todo 操作进行用户归属检查。
 
-如果通过 Supabase Dashboard 的 SQL Editor 执行，打开 `supabase/migrations/20261014160000_create_todos.sql` 并执行完整 SQL 即可；建议仍通过 Supabase CLI 管理后续迁移历史。
+### 从旧版模板升级
+
+旧版模板将 `todos.user_id` 关联到 Supabase Auth 的 `auth.users`。新的迁移会把外键切换到 Better Auth 的 `public.user`。**如果旧数据库中已有用户或 Todo 数据，先备份并完成用户 ID 映射，再执行迁移**；旧 Supabase Auth 身份不会自动迁移到 Better Auth。
 
 ## 3. 启动
-
-在项目根目录：
 
 ```bash
 pnpm dev
@@ -101,54 +83,40 @@ pnpm dev
 
 - Web：<http://localhost:5173>
 - API health：<http://localhost:4000/health>
-- OpenAPI JSON：<http://localhost:4000/openapi.json>
+- OpenAPI：<http://localhost:4000/openapi.json>
 
-先注册/登录，再创建、完成或删除 Todo。注册是否需要邮箱确认取决于 Supabase Auth 项目设置。
+创建邮箱/密码账户后即可登录，添加、完成和删除 Todo。会话用 HTTP-only cookie 传递，浏览器不保存可由 JavaScript 读取的 access token。
 
-## 4. 常用命令
+## 常用命令
 
 ```bash
-pnpm dev          # 同时启动 Web 和 API
-pnpm build        # 构建 API 和 Web
+pnpm dev          # 同时启动前端和 API
+pnpm build        # 构建 API 和前端
 pnpm typecheck    # TypeScript 类型检查
 pnpm test         # API smoke tests
-pnpm db:push      # 将本地 SQL migration 推送到已 link 的 Supabase 项目
-pnpm db:status    # 查看 Supabase migration 状态
-pnpm exec supabase --help  # 查看当前锁定版本的 CLI 命令
+pnpm db:push      # 推送本地 SQL migration
+pnpm db:status    # 查看 migration 状态
 ```
 
-## API 路由
+## API
 
-所有 Todo 路由都要求 `Authorization: Bearer <Supabase access token>`。
+Better Auth endpoints 使用 `/api/auth/*`。业务接口：
 
 | Method | Path | 说明 |
 |---|---|---|
-| `GET` | `/health` | API 存活检查 |
+| `GET` | `/health` | 健康检查 |
 | `GET` | `/openapi.json` | OpenAPI 文档 |
-| `GET` | `/api/v1/todos` | 获取当前用户的 Todo |
+| `GET` | `/api/v1/todos` | 获取当前用户 Todo |
 | `POST` | `/api/v1/todos` | 创建 Todo，body: `{ "title": "..." }` |
 | `PATCH` | `/api/v1/todos/:id` | 更新标题或完成状态 |
 | `DELETE` | `/api/v1/todos/:id` | 删除 Todo |
 
-统一错误形状：
+Todo 业务路由要求有效的 Better Auth session cookie；前端通过 `credentials: include` 发送 cookie。
 
-```json
-{
-  "error": {
-    "code": "VALIDATION_ERROR",
-    "message": "Invalid request payload"
-  }
-}
-```
+## 安全边界
 
-## 安全说明
-
-- 前端只使用 Publishable key；不暴露 `DATABASE_URL`、数据库密码或 `service_role` / secret key。
-- API 使用 `auth.getUser(accessToken)` 向 Supabase Auth 验证 token，并在每条 Todo 查询、更新和删除中同时按 `user_id` 过滤。
-- Migration 对 `public.todos` 启用 RLS，默认拒绝 `anon`，并为 `authenticated` 配置 owner-only policies。直连 PostgreSQL 的高权限角色可能绕过 RLS，因此服务端业务代码仍必须进行身份与所有权校验。
-- 生产部署时应设置精确的 `WEB_ORIGIN`、HTTPS、速率限制、审计日志、数据库备份与告警；示例还不是完整的生产安全基线。
-- 不要把 `.env` 文件提交到 Git。
-
-## 生产部署建议
-
-前端构建为静态资源并部署到 CDN/静态托管；Fastify 作为单独的 Node.js 服务或容器部署；Supabase 承担 PostgreSQL 与 Auth。API 服务使用 Session pooler 或在网络支持时使用 direct connection；短生命周期 / serverless 场景另行评估 Transaction pooler 与连接上限。
+- Supabase 只用作托管 PostgreSQL；运行时不调用 Supabase Auth、Storage、Realtime 或 Edge Functions。
+- 数据库连接串与 Better Auth secret 仅保存在 API 端。
+- Auth 表和 Todo 表都启用了 RLS，且没有面向 Supabase Data API 的 `anon` / `authenticated` policies。数据库 owner / 高权限服务端连接可以绕过 RLS，因此 Fastify 仍必须校验会话和资源所有权。
+- 生产环境请使用 HTTPS、精确的 `WEB_ORIGIN`、强随机 `BETTER_AUTH_SECRET`、数据库备份与日志监控。
+- 本项目是起步模板；部署前应在自己的 Supabase 项目上应用并验证迁移、构建和认证流程。

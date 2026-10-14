@@ -1,10 +1,14 @@
-import { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useContext, useMemo } from 'react';
 import type { PropsWithChildren } from 'react';
-import type { Session } from '@supabase/supabase-js';
-import { isSupabaseConfigured, supabase } from './lib/supabase';
+import { authClient, isApiConfigured } from './lib/auth-client';
+
+type AuthUser = {
+  id: string;
+  email: string;
+};
 
 type AuthContextValue = {
-  session: Session | null;
+  session: { user: AuthUser } | null;
   loading: boolean;
   configured: boolean;
   signIn: (email: string, password: string) => Promise<void>;
@@ -15,55 +19,31 @@ type AuthContextValue = {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: PropsWithChildren) {
-  const [session, setSession] = useState<Session | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    if (!supabase) {
-      setLoading(false);
-      return;
-    }
-
-    let alive = true;
-    void supabase.auth.getSession().then(({ data, error }) => {
-      if (!alive) return;
-      if (error) console.error('Unable to restore Supabase session:', error.message);
-      setSession(data.session);
-      setLoading(false);
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, nextSession) => {
-      setSession(nextSession);
-      setLoading(false);
-    });
-
-    return () => {
-      alive = false;
-      subscription.unsubscribe();
-    };
-  }, []);
+  const { data, isPending } = authClient.useSession();
+  const session = data ? { user: { id: data.user.id, email: data.user.email } } : null;
 
   const value = useMemo<AuthContextValue>(() => ({
     session,
-    loading,
-    configured: isSupabaseConfigured,
+    loading: isPending,
+    configured: isApiConfigured,
     async signIn(email, password) {
-      if (!supabase) throw new Error('请先配置 Supabase 环境变量。');
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) throw error;
+      const { error } = await authClient.signIn.email({ email, password });
+      if (error) throw new Error(error.message || '登录失败，请检查邮箱和密码。');
     },
     async signUp(email, password) {
-      if (!supabase) throw new Error('请先配置 Supabase 环境变量。');
-      const { data, error } = await supabase.auth.signUp({ email, password });
-      if (error) throw error;
-      return !data.session;
+      const { error } = await authClient.signUp.email({
+        name: email.split('@')[0] || 'New user',
+        email,
+        password,
+      });
+      if (error) throw new Error(error.message || '注册失败，请重试。');
+      return false;
     },
     async signOut() {
-      if (!supabase) return;
-      const { error } = await supabase.auth.signOut();
-      if (error) throw error;
+      const { error } = await authClient.signOut();
+      if (error) throw new Error(error.message || '退出登录失败。');
     },
-  }), [session, loading]);
+  }), [session, isPending]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

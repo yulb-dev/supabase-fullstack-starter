@@ -27,7 +27,6 @@ export function App() {
   const [authError, setAuthError] = useState('');
   const [title, setTitle] = useState('');
   const queryClient = useQueryClient();
-  const token = session?.access_token ?? '';
   const userId = session?.user.id ?? '';
   const todoKey = ['todos', userId];
 
@@ -38,12 +37,12 @@ export function App() {
 
   const todosQuery = useQuery({
     queryKey: todoKey,
-    queryFn: () => apiRequest<Todo[]>('/api/v1/todos', token),
+    queryFn: () => apiRequest<Todo[]>('/api/v1/todos'),
     enabled: Boolean(token),
   });
 
   const createTodo = useMutation({
-    mutationFn: (nextTitle: string) => apiRequest<Todo>('/api/v1/todos', token, {
+    mutationFn: (nextTitle: string) => apiRequest<Todo>('/api/v1/todos', {
       method: 'POST', body: JSON.stringify({ title: nextTitle }),
     }),
     onSuccess: async () => {
@@ -54,7 +53,7 @@ export function App() {
 
   const updateTodo = useMutation({
     mutationFn: (todo: Pick<Todo, 'id' | 'completed'>) => apiRequest<Todo>(
-      `/api/v1/todos/${todo.id}`, token, {
+      `/api/v1/todos/${todo.id}`, {
         method: 'PATCH', body: JSON.stringify({ completed: todo.completed }),
       },
     ),
@@ -62,7 +61,7 @@ export function App() {
   });
 
   const deleteTodo = useMutation({
-    mutationFn: (id: string) => apiRequest<{ id: string }>(`/api/v1/todos/${id}`, token, {
+    mutationFn: (id: string) => apiRequest<{ id: string }>(`/api/v1/todos/${id}`, {
       method: 'DELETE',
     }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: todoKey }),
@@ -78,8 +77,8 @@ export function App() {
         <section className="setup-card">
           <div className="brand-mark">S</div>
           <p className="eyebrow">STARTER SETUP</p>
-          <h1>先连接你的 Supabase 项目</h1>
-          <p className="muted">复制环境变量模板并填写 Project URL 与 Publishable key，然后重启 Vite。</p>
+          <h1>配置数据库与 API</h1>
+          <p className="muted">配置后端 PostgreSQL 连接串和 Better Auth 密钥，并确认前端 API 地址；然后重启开发服务器。</p>
           <pre><code>cp apps/web/.env.example apps/web/.env</code></pre>
           <pre><code>cp apps/api/.env.example apps/api/.env</code></pre>
           <p className="small-note">数据库连接串只放在 <code>apps/api/.env</code>，不要放到任何 VITE_ 变量里。</p>
@@ -93,9 +92,9 @@ export function App() {
       <main className="center-stage">
         <section className="auth-card">
           <div className="brand-mark">S</div>
-          <p className="eyebrow">SUPABASE FULL-STACK STARTER</p>
+          <p className="eyebrow">POSTGRESQL FULL-STACK STARTER</p>
           <h1>{isRegister ? '创建你的工作空间' : '欢迎回来'}</h1>
-          <p className="muted">使用 Supabase Auth 登录，数据通过独立 Fastify API 安全访问。</p>
+          <p className="muted">使用 Better Auth 会话 Cookie 登录，数据通过独立 Fastify API 访问 PostgreSQL。</p>
           <form className="auth-form" onSubmit={authForm.handleSubmit(async (values) => {
             setAuthError('');
             setNotice('');
@@ -193,7 +192,7 @@ export function App() {
           )}
       </section>
 
-      <footer className="footer"><span>Built with React, Fastify & Supabase</span><a href="http://localhost:4000/openapi.json" target="_blank" rel="noreferrer">查看 API 文档 ↗</a></footer>
+      <footer className="footer"><span>Built with React, Fastify & PostgreSQL</span><a href="http://localhost:4000/openapi.json" target="_blank" rel="noreferrer">查看 API 文档 ↗</a></footer>
     </main>
   );
 }

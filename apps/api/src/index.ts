@@ -1,5 +1,6 @@
 import { buildApp } from './app.js';
 import { closeDatabase } from './db/index.js';
+import { closeAuthPool } from './plugins/auth.js';
 import { env } from './env.js';
 
 const app = buildApp();
@@ -15,7 +16,7 @@ try {
 async function shutdown(signal: string) {
   app.log.info({ signal }, 'Shutting down API');
   await app.close();
-  await closeDatabase();
+  await Promise.all([closeDatabase(), closeAuthPool()]);
   process.exit(0);
 }
 
