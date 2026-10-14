@@ -38,7 +38,7 @@ export function App() {
   const todosQuery = useQuery({
     queryKey: todoKey,
     queryFn: () => apiRequest<Todo[]>('/api/v1/todos'),
-    enabled: Boolean(token),
+    enabled: Boolean(session),
   });
 
   const createTodo = useMutation({

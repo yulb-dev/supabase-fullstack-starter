@@ -20,7 +20,7 @@ test('GET /openapi.json returns an OpenAPI document', async () => {
   assert.equal(response.json().openapi, '3.1.0');
 });
 
-test('Todo endpoints reject requests without a bearer token', async () => {
+test('Todo endpoints reject requests without an auth session cookie', async () => {
   const response = await app.inject({ method: 'GET', url: '/api/v1/todos' });
   assert.equal(response.statusCode, 401);
   assert.equal(response.json().error.code, 'UNAUTHORIZED');
