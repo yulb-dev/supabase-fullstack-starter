@@ -1,20 +1,25 @@
-# dependencies
+# Dependencies
 node_modules/
 .pnp.*
+.pnpm-store/
 
-# build outputs
+# Build outputs and test artifacts
 dist/
 build/
 coverage/
+playwright-report/
+test-results/
 *.tsbuildinfo
+.eslintcache
+.vite/
 
-# env files - commit only examples
+# Env files - commit templates only
 .env
 .env.*
 !.env.example
 !.env.*.example
 
-# local tools
+# Local tools
 .DS_Store
 .idea/
 .vscode/*
@@ -23,7 +28,7 @@ coverage/
 # Supabase local runtime
 supabase/.temp/
 
-# logs
+# Logs
 *.log
 npm-debug.log*
 pnpm-debug.log*
