@@ -125,7 +125,7 @@ pnpm db:status       # 查看 migration 状态
 
 ## API 路由
 
-Better Auth endpoints 位于 `/api/auth/*)。业务路由如下：
+Better Auth endpoints 位于 `/api/auth/*`。业务路由如下：
 
 | Method | Path | 说明 |
 |---|---|---|
