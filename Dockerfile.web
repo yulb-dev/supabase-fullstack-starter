@@ -7,7 +7,7 @@ ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
 COPY package.json pnpm-workspace.yaml .npmrc ./
 COPY apps/api/package.json apps/api/package.json
 COPY apps/web/package.json apps/web/package.json
-RUN pnpm install --no-frozen-lockfile
+RUN if [ -f pnpm-lock.yaml ]; then pnpm install --frozen-lockfile; else pnpm install --no-frozen-lockfile; fi
 
 COPY . .
 RUN pnpm --filter @starter/web build

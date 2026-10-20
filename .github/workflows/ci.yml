@@ -18,6 +18,8 @@ jobs:
     name: Lint, typecheck, test, build
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    permissions:
+      contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -33,10 +35,13 @@ jobs:
           node-version-file: .nvmrc
           package-manager-cache: false
 
-      # A generated pnpm-lock.yaml is intentionally not fabricated. Until one is
-      # committed, install from exact direct dependency versions and resolve transitives on CI.
       - name: Install dependencies
-        run: pnpm install --no-frozen-lockfile
+        run: |
+          if [ -f pnpm-lock.yaml ]; then
+            pnpm install --frozen-lockfile
+          else
+            pnpm install --no-frozen-lockfile
+          fi
 
       - name: Lint
         run: pnpm lint
@@ -51,6 +56,23 @@ jobs:
 
       - name: Production build
         run: pnpm build
+
+      # Bootstrap the lockfile once from a successful, pinned toolchain run.
+      # This only runs on a push to main, never on pull_request code.
+      - name: Commit initial pnpm lockfile
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          git add pnpm-lock.yaml
+          if git diff --cached --quiet; then
+            echo "pnpm-lock.yaml is already committed."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore: add pnpm lockfile"
+          if ! git push; then
+            echo "::warning::The lockfile was generated but could not be pushed. Check branch protection and commit pnpm-lock.yaml manually."
+          fi
 
   e2e:
     name: Browser smoke tests
@@ -72,7 +94,12 @@ jobs:
           package-manager-cache: false
 
       - name: Install dependencies
-        run: pnpm install --no-frozen-lockfile
+        run: |
+          if [ -f pnpm-lock.yaml ]; then
+            pnpm install --frozen-lockfile
+          else
+            pnpm install --no-frozen-lockfile
+          fi
 
       - name: Install Playwright Chromium
         run: pnpm exec playwright install --with-deps chromium

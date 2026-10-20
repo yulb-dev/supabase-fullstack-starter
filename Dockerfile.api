@@ -5,7 +5,7 @@ RUN corepack enable
 COPY package.json pnpm-workspace.yaml .npmrc ./
 COPY apps/api/package.json apps/api/package.json
 COPY apps/web/package.json apps/web/package.json
-RUN pnpm install --no-frozen-lockfile
+RUN if [ -f pnpm-lock.yaml ]; then pnpm install --frozen-lockfile; else pnpm install --no-frozen-lockfile; fi
 
 COPY . .
 RUN pnpm --filter @starter/api build
@@ -16,7 +16,7 @@ RUN corepack enable
 COPY package.json pnpm-workspace.yaml .npmrc ./
 COPY apps/api/package.json apps/api/package.json
 COPY apps/web/package.json apps/web/package.json
-RUN pnpm install --filter @starter/api --prod --no-frozen-lockfile
+RUN if [ -f pnpm-lock.yaml ]; then pnpm install --filter @starter/api --prod --frozen-lockfile; else pnpm install --filter @starter/api --prod --no-frozen-lockfile; fi
 
 FROM node:24-alpine AS runner
 ENV NODE_ENV=production HOST=0.0.0.0 PORT=4000

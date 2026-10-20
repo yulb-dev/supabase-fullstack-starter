@@ -17,7 +17,7 @@
 | 质量工具 | ESLint、Prettier、Vitest、React Testing Library、Node test runner、Playwright |
 | 交付 | GitHub Actions CI、Dependabot、Docker、Docker Compose |
 
-直接依赖使用精确版本，避免 semver 范围导致直接依赖静默漂移。项目需要提交 `pnpm-lock.yaml` 才能冻结完整的传递依赖；当前执行环境无法访问 npm registry，因此本次提交没有伪造锁文件。首次在可联网环境执行 `pnpm install` 后，请立即把生成的锁文件提交，并把 CI / Docker 中的 `--no-frozen-lockfile` 改为 `--frozen-lockfile`。
+直接依赖使用精确版本，避免 semver 范围导致直接依赖静默漂移。项目需要提交 `pnpm-lock.yaml` 才能冻结完整的传递依赖。首次在 `main` 分支推送后，CI 会在质量检查通过时生成并尝试提交锁文件；后续 CI 和 Docker 构建检测到锁文件后会使用 `--frozen-lockfile`。如果仓库开启了禁止 GitHub Actions 推送的分支保护，CI 会给出 warning，需要在本地运行 `pnpm install` 后手动提交生成的 `pnpm-lock.yaml`。
 
 ## 项目结构
 
