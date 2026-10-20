@@ -1,24 +1,95 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
+import helmet from '@fastify/helmet';
+import rateLimit from '@fastify/rate-limit';
+import swagger from '@fastify/swagger';
+import swaggerUi from '@fastify/swagger-ui';
 import { env } from './env.js';
 import { auth } from './plugins/auth.js';
 import { registerTodoRoutes } from './modules/todos/routes.js';
 
+const mutationMethods = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+
 export function buildApp() {
-  const app = Fastify({ logger: env.nodeEnv !== 'test' });
+  const app = Fastify({
+    logger: env.nodeEnv !== 'test',
+    bodyLimit: 1_048_576,
+    requestTimeout: 30_000,
+  });
   app.decorateRequest('currentUser', null);
 
+  // Register plugins before application routes so they apply to the whole API.
+  app.register(helmet, {
+    // Swagger UI enables a nonce-based static CSP; keep Helmet's other headers.
+    contentSecurityPolicy: false,
+  });
   app.register(cors, {
     origin: env.webOrigins,
     credentials: true,
-    methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['content-type', 'authorization'],
+    maxAge: 86_400,
+  });
+  // This in-memory limiter is suitable for a single API instance. Multi-instance
+  // deployments should configure a shared store (for example Redis).
+  app.register(rateLimit, {
+    global: true,
+    max: 120,
+    timeWindow: '1 minute',
+    errorResponseBuilder: () => ({
+      error: { code: 'RATE_LIMITED', message: 'Too many requests. Please try again shortly.' },
+    }),
+  });
+  app.register(swagger, {
+    openapi: {
+      info: {
+        title: 'Full-Stack Starter API',
+        version: '0.3.0',
+        description: 'Fastify REST API with Better Auth cookie sessions and Supabase PostgreSQL.',
+      },
+      servers: [{ url: env.betterAuthUrl }],
+      components: {
+        securitySchemes: {
+          sessionCookie: {
+            type: 'apiKey',
+            in: 'cookie',
+            name: 'better-auth.session_token',
+            description: 'HTTP-only Better Auth session cookie.',
+          },
+        },
+      },
+      security: [{ sessionCookie: [] }],
+    },
+  });
+  app.register(swaggerUi, {
+    routePrefix: '/docs',
+    staticCSP: true,
+    uiConfig: {
+      docExpansion: 'list',
+      deepLinking: false,
+      persistAuthorization: true,
+    },
   });
 
-  // Better Auth runs in Fastify and stores users/sessions in Supabase PostgreSQL.
+  // Cookie-authenticated writes must originate from the configured frontend.
+  // Better Auth has its own trusted-origin validation for the /api/auth routes.
+  app.addHook('preHandler', async (request, reply) => {
+    if (!request.url.startsWith('/api/v1/') || !mutationMethods.has(request.method)) return;
+    const origin = request.headers.origin;
+    if (!origin || !env.webOrigins.includes(origin)) {
+      return reply.code(403).send({
+        error: { code: 'UNTRUSTED_ORIGIN', message: 'This request origin is not allowed.' },
+      });
+    }
+  });
+
   app.route({
     method: ['GET', 'POST'],
     url: '/api/auth/*',
+    config: {
+      rateLimit: { max: 10, timeWindow: '1 minute' },
+    },
+    schema: { hide: true },
     async handler(request, reply) {
       if (!auth) {
         return reply.code(503).send({
@@ -64,62 +135,35 @@ export function buildApp() {
     },
   });
 
-  app.get('/health', async () => ({
+  app.get('/health', {
+    schema: {
+      hide: false,
+      tags: ['system'],
+      summary: 'Health check',
+      security: [],
+      response: {
+        200: {
+          type: 'object',
+          required: ['status', 'service', 'databaseConfigured', 'authConfigured'],
+          properties: {
+            status: { type: 'string', enum: ['ok'] },
+            service: { type: 'string', enum: ['api'] },
+            databaseConfigured: { type: 'boolean' },
+            authConfigured: { type: 'boolean' },
+          },
+        },
+      },
+    },
+  }, async () => ({
     status: 'ok',
     service: 'api',
     databaseConfigured: Boolean(env.databaseUrl),
     authConfigured: Boolean(auth),
   }));
 
-  app.get('/openapi.json', async () => ({
-    openapi: '3.1.0',
-    info: {
-      title: 'Full-Stack Starter API',
-      version: '0.2.0',
-      description: 'Fastify REST API with Better Auth cookie sessions and Supabase PostgreSQL.',
-    },
-    servers: [{ url: env.betterAuthUrl }],
-    components: {
-      securitySchemes: {
-        sessionCookie: {
-          type: 'apiKey',
-          in: 'cookie',
-          name: 'better-auth.session_token',
-          description: 'HTTP-only Better Auth session cookie.',
-        },
-      },
-    },
-    security: [{ sessionCookie: [] }],
-    paths: {
-      '/health': { get: { security: [], summary: 'API health check', responses: { 200: { description: 'Service is running' } } } },
-      '/api/auth/sign-in/email': { post: { security: [], summary: 'Sign in using email and password', responses: { 200: { description: 'Signed in; session cookie set' }, 401: { description: 'Invalid credentials' } } } },
-      '/api/auth/sign-up/email': { post: { security: [], summary: 'Register using email and password', responses: { 200: { description: 'Account created' }, 400: { description: 'Invalid request' } } } },
-      '/api/v1/todos': {
-        get: { tags: ['todos'], summary: 'List current user todos', responses: { 200: { description: 'Todo list' }, 401: { description: 'Unauthorized' } } },
-        post: {
-          tags: ['todos'],
-          summary: 'Create a todo',
-          requestBody: {
-            required: true,
-            content: {
-              'application/json': {
-                schema: {
-                  type: 'object',
-                  required: ['title'],
-                  properties: { title: { type: 'string', maxLength: 200 } },
-                },
-              },
-            },
-          },
-          responses: { 201: { description: 'Created' } },
-        },
-      },
-      '/api/v1/todos/{id}': {
-        patch: { tags: ['todos'], summary: 'Update a todo', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string', format: 'uuid' } }], responses: { 200: { description: 'Updated' }, 404: { description: 'Not found' } } },
-        delete: { tags: ['todos'], summary: 'Delete a todo', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string', format: 'uuid' } }], responses: { 200: { description: 'Deleted' }, 404: { description: 'Not found' } } },
-      },
-    },
-  }));
+  app.get('/openapi.json', {
+    schema: { hide: true },
+  }, async () => app.swagger());
 
   app.register(registerTodoRoutes, { prefix: '/api/v1/todos' });
 
@@ -129,10 +173,19 @@ export function buildApp() {
 
   app.setErrorHandler((error, request, reply) => {
     if (error.validation) {
-      return reply.code(400).send({ error: { code: 'VALIDATION_ERROR', message: 'Invalid request payload.' } });
+      return reply.code(400).send({
+        error: { code: 'VALIDATION_ERROR', message: 'Invalid request payload.' },
+      });
+    }
+    if (error.statusCode && error.statusCode >= 400 && error.statusCode < 500) {
+      return reply.code(error.statusCode).send({
+        error: { code: 'REQUEST_ERROR', message: error.message },
+      });
     }
     request.log.error({ err: error }, 'Unhandled API error');
-    return reply.code(500).send({ error: { code: 'INTERNAL_SERVER_ERROR', message: 'Unexpected server error.' } });
+    return reply.code(500).send({
+      error: { code: 'INTERNAL_SERVER_ERROR', message: 'Unexpected server error.' },
+    });
   });
 
   return app;
