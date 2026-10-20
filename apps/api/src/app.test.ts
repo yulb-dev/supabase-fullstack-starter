@@ -1,10 +1,15 @@
 import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildApp } from './app.js';
+import { closeDatabase } from './db/index.js';
+import { closeAuthPool } from './plugins/auth.js';
 
 const app = buildApp();
 
-after(async () => app.close());
+after(async () => {
+  await app.close();
+  await Promise.all([closeDatabase(), closeAuthPool()]);
+});
 
 test('GET /health reports service status without exposing secrets', async () => {
   const response = await app.inject({ method: 'GET', url: '/health' });
